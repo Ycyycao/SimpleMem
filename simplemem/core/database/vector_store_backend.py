@@ -147,28 +147,44 @@ class LanceDBVectorStoreBackend:
             print(f"Opened existing table: {self.table_name}")
 
     def _init_fts_index(self) -> None:
+        """Build the full-text index backing the lexical retrieval path.
+
+        LanceDB removed its Tantivy backend in 0.25, so asking for it raises
+        instead of falling back. That failure used to be swallowed by the
+        `except` below, leaving keyword search permanently empty and quietly
+        reducing three-view retrieval to dense similarity alone — the exact
+        thing the lexical layer exists to prevent, since proper nouns are what
+        dense vectors blur. Try Tantivy first so older LanceDB keeps its
+        previous behaviour, then fall back to the native index, which supports
+        the same English stemming through explicit arguments.
+        """
         if self._fts_initialized:
             return
 
-        try:
-            if self._is_cloud_storage:
+        attempts = []
+        if not self._is_cloud_storage:
+            attempts.append((
+                "Tantivy mode",
+                {"use_tantivy": True, "tokenizer_name": "en_stem"},
+            ))
+        attempts.append((
+            "native mode",
+            {"use_tantivy": False, "language": "English", "stem": True},
+        ))
+
+        last_error = None
+        for label, kwargs in attempts:
+            try:
                 self.table.create_fts_index(
-                    "lossless_restatement",
-                    use_tantivy=False,
-                    replace=True,
+                    "lossless_restatement", replace=True, **kwargs
                 )
-                print("FTS index created (native mode for cloud storage)")
-            else:
-                self.table.create_fts_index(
-                    "lossless_restatement",
-                    use_tantivy=True,
-                    tokenizer_name="en_stem",
-                    replace=True,
-                )
-                print("FTS index created (Tantivy mode)")
-            self._fts_initialized = True
-        except Exception as error:
-            print(f"FTS index creation skipped: {error}")
+                print(f"FTS index created ({label})")
+                self._fts_initialized = True
+                return
+            except Exception as error:
+                last_error = error
+
+        print(f"FTS index creation skipped: {last_error}")
 
     def insert(self, records: Sequence[VectorStoreRecord]) -> None:
         if not records:
