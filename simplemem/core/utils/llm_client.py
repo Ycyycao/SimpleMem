@@ -1,17 +1,9 @@
 """
 LLM Client - Handles all LLM interactions
-
-Calls go through litellm rather than the OpenAI SDK. litellm speaks the same
-request/response shape, so nothing above this file changes, but it makes the
-provider swappable (OpenAI / Gemini / Anthropic / a local server) through the
-model string alone, and it exposes a callback hook that a host application can
-use to record every call. `base_url` and `api_key` are forwarded per call as
-`api_base` / `api_key`, so a model name without a provider prefix still lands
-on the configured endpoint instead of litellm's default routing.
 """
 import json
 from typing import List, Dict, Any, Optional
-import litellm
+from openai import OpenAI
 from simplemem.core.settings import settings as config
 
 
@@ -33,22 +25,20 @@ class LLMClient:
         self.enable_thinking = enable_thinking if enable_thinking is not None else config.ENABLE_THINKING
         self.use_streaming = use_streaming if use_streaming is not None else config.USE_STREAMING
 
+        # Initialize OpenAI client with optional base_url
+        client_kwargs = {"api_key": self.api_key}
         if self.base_url:
-            print(f"Using custom LLM base URL: {self.base_url}")
+            client_kwargs["base_url"] = self.base_url
+            print(f"Using custom OpenAI base URL: {self.base_url}")
 
         if self.enable_thinking:
             print(f"Deep thinking mode enabled")
 
-        # litellm is called as a function, not a client object; the per-call
-        # credentials are assembled once here and merged into every request.
-        self._call_kwargs: Dict[str, Any] = {}
-        if self.api_key:
-            self._call_kwargs["api_key"] = self.api_key
-        if self.base_url:
-            self._call_kwargs["api_base"] = self.base_url
-
-    def _completion(self, **kwargs):
-        return litellm.completion(**{**self._call_kwargs, **kwargs})
+        # self.client = OpenAI(**client_kwargs)
+        self.client = OpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+        )
 
     def chat_completion(
         self,
@@ -94,7 +84,7 @@ class LLMClient:
                     kwargs["stream"] = True
                     return self._handle_streaming_response(**kwargs)
                 else:
-                    response = self._completion(**kwargs)
+                    response = self.client.chat.completions.create(**kwargs)
                     return response.choices[0].message.content or ""
                 
                 # kwargs["stream"] = True
@@ -120,7 +110,7 @@ class LLMClient:
         Handle streaming response and collect full content
         """
         full_content = []
-        stream = self._completion(**kwargs)
+        stream = self.client.chat.completions.create(**kwargs)
 
         # for chunk in stream:
         #     if chunk.choices is not None:
