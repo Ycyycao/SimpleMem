@@ -2,7 +2,6 @@
 LLM Client - Handles all LLM interactions
 """
 import json
-import os
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
 from simplemem.core.settings import settings as config
@@ -75,11 +74,6 @@ class LLMClient:
                 # Explicitly set to False for non-streaming calls or JSON format
                 kwargs["extra_body"] = {"enable_thinking": False}
         # For OpenAI and other APIs, don't add extra_body parameters
-        # A local server (vLLM) decides thinking by its chat template, whose default is on: only this reaches it
-        if os.getenv("SIMPLEMEM_TEMPLATE_THINKING") == "1":
-            kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": bool(self.enable_thinking)}}
-        if os.getenv("SIMPLEMEM_MAX_TOKENS"):
-            kwargs["max_tokens"] = int(os.environ["SIMPLEMEM_MAX_TOKENS"])
 
         # Retry mechanism
         last_exception = None
