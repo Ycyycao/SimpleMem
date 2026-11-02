@@ -29,6 +29,7 @@ Two mappings are not one-to-one and are worth stating:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -87,12 +88,18 @@ class MemoryArenaMemory:
     @property
     def system(self) -> SimpleMemSystem:
         if self._system is None:
+            # One LanceDB directory per user rather than one table per user in a
+            # shared directory: MemoryArena runs several cases against this server
+            # at once, and keeping their stores apart on disk means no two of them
+            # ever touch the same LanceDB manifest.
+            slug = _slug(self.user_id or "default")
+            db_path = os.path.join(self._db_path, slug) if self._db_path else None
             self._system = SimpleMemSystem(
                 api_key=self._api_key,
                 model=self._model,
                 base_url=self._base_url,
-                db_path=self._db_path,
-                table_name=_slug(self.user_id or "default"),
+                db_path=db_path,
+                table_name=slug,
                 clear_db=True,       # each run starts from an empty store
                 **self._system_kwargs,
             )
