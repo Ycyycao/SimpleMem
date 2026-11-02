@@ -10,6 +10,39 @@ from simplemem.core.utils.llm_client import LLMClient
 from simplemem.core.settings import settings as config
 
 
+def format_entries(contexts: List[MemoryEntry]) -> str:
+    """Render retrieved memory units as readable text.
+
+    Kept at module level because retrieval output is useful on its own: a host
+    that supplies its own answering stage (an agent with tools, say) still wants
+    the entries rendered the same way the built-in generator sees them, rather
+    than inventing a second format that drifts from this one.
+    """
+    formatted = []
+    for i, entry in enumerate(contexts, 1):
+        parts = [f"[Context {i}]"]
+        parts.append(f"Content: {entry.lossless_restatement}")
+
+        if entry.timestamp:
+            parts.append(f"Time: {entry.timestamp}")
+
+        if entry.location:
+            parts.append(f"Location: {entry.location}")
+
+        if entry.persons:
+            parts.append(f"Persons: {', '.join(entry.persons)}")
+
+        if entry.entities:
+            parts.append(f"Related Entities: {', '.join(entry.entities)}")
+
+        if entry.topic:
+            parts.append(f"Topic: {entry.topic}")
+
+        formatted.append("\n".join(parts))
+
+    return "\n\n".join(formatted)
+
+
 class AnswerGenerator:
     """
     Answer Generator - Synthesis from retrieved memory units (Section 3.3)
@@ -86,29 +119,7 @@ class AnswerGenerator:
         """
         Format contexts to readable text
         """
-        formatted = []
-        for i, entry in enumerate(contexts, 1):
-            parts = [f"[Context {i}]"]
-            parts.append(f"Content: {entry.lossless_restatement}")
-
-            if entry.timestamp:
-                parts.append(f"Time: {entry.timestamp}")
-
-            if entry.location:
-                parts.append(f"Location: {entry.location}")
-
-            if entry.persons:
-                parts.append(f"Persons: {', '.join(entry.persons)}")
-
-            if entry.entities:
-                parts.append(f"Related Entities: {', '.join(entry.entities)}")
-
-            if entry.topic:
-                parts.append(f"Topic: {entry.topic}")
-
-            formatted.append("\n".join(parts))
-
-        return "\n\n".join(formatted)
+        return format_entries(contexts)
 
     def _build_answer_prompt(self, query: str, context_str: str) -> str:
         """
